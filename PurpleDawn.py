@@ -96,6 +96,21 @@ def report():
 		REPORT += ('\nTest {0}: {1}'.format(_, TEST_RESULTS.get(_)))
 	return REPORT
 
+def device_unlock(device):
+	press('Unlock with Passcode?', modifiers=['BUTTON'])
+	press('Use Device Passcode', modifiers=['ALERT'])
+	if quick.wait('SecureTextField', timeout = 5):
+		quick.type_string('apple1984')
+		quick.tap('Next')
+	else:
+		quick.type_string('100000')
+		quick.wait(timeout = 10)
+	if pane_check(device=device, expected_pane='OBPrivacySplash'):
+		pass
+	else:
+		log_info('Passcode Unlock Failed')
+
+
 #Method for restoring from backup
 
 
@@ -121,6 +136,9 @@ class FlowState(object):
 		self.region = 'United States'
 		self.region_tmp = None
 
+		#Restore From Backup
+		self.restore_backup = False
+
 		#iCloud sign in info
 		self.iCloud_account = None
 		self.iCloud_password = None
@@ -143,47 +161,50 @@ class FlowState(object):
 		self.four_num_passcode = None #or numeric strings
 
 
+
+
 		#Device Type
 
 #Methods for handling the panes of Buddy
 
-def language_chooser(FlowState):
-	device = FlowState.primary_device
+def unknown_pane(self):
+	device = self.primary_device
+	pane = current_buddy_pane()
+
+def language_chooser(self):
+	device = self.primary_device
 	quick.unlock(device = device)
 	#This makes language localization available and prevents a reboot mid test.
-	quick.set_localized_mode(True)
-	quick.set_localized_mode(False)
 	pane_check(device = device, expected_pane = 'BuddyLanguage')
-	if FlowState.language_tmp is not None:
+	if self.language_tmp is not None:
 		screen_log(device = device)
-		quick.wait(FlowState.language_tmp)
-		quick.tap(FlowState.language_tmp)
+		press(self.language_tmp)
 		quick.tap('StaticText', index = 2) #Selects the Unites States no matter what 
 		quick.set_localized_mode(True)
 		the_back = quick.get_localized_string('GENERIC_BACK_BUTTON', partial=False)
 		quick.set_localized_mode(False)
 		press(the_back)
 		quick.tap(the_back)
-		press(FlowState.language_primary)
+		press(self.language_primary)
 		pass_fail(expected='BuddyLocale', test_case='Language Chooser Test', test_num=2)
 
 	else:
 		screen_log(device = device)
-		press(FlowState.language_primary)
+		press(self.language_primary)
 		log_info(" - Language Chooser Successful") 
 
-def region_chooser(FlowState):
-	device = FlowState.primary_device
+def region_chooser(self):
+	device = self.primary_device
 	pane_check(device=device, expected_pane='BuddyLocale')
-	if FlowState.region_tmp is not None:
+	if self.region_tmp is not None:
 		screen_log(device=device)
-		press(FlowState.region_tmp)
+		press(self.region_tmp)
 		quick.set_localized_mode(True)
 		the_back = quick.get_localized_string('GENERIC_BACK_BUTTON', partial=False)
 		quick.set_localized_mode(False)
 		press(the_back)
 		press('United States')
-		quick.wait(5)
+		time.sleep(3)
 		pass_fail(expected='BuddyProximitySetup', test_case = 'Region Chooser Test', test_num=3)
 		
 	else:
@@ -193,28 +214,32 @@ def region_chooser(FlowState):
 def prox_pane():
 	press('Set Up Manually')
 
-def wifi_chooser(FlowState):
-	ssid = FlowState.wifi_ssid
-	device = FlowState.primary_device
+def wifi_chooser(self):
+	ssid = self.wifi_ssid
+	device = self.primary_device
 	pane_check(device=device, expected_pane='WFBuddyView')
-	if FlowState.protected_wifi:
+	if self.protected_wifi:
 		press(ssid)
 		quick.wait('Join')
-		quick.type_string(FlowState.wifi_password)
+		quick.type_string(self.wifi_password)
 		quick.tap('Join')
-		while not pane_check(device=device, expected_pane='OBPrivacySplash'):
-			quick.wait(3)
+		time.sleep(10)
+		if pane_check(device=device, expected_pane='RUIPage'):
+			device_unlock(device)
 		pass_fail(expected='OBPrivacySplash', test_case='Protected Network Test', test_num=28)
 	else:
 		press(ssid)
-		quick.wait('Continue')
+		time.sleep(10)
+		if pane_check(device=device, expected_pane='RUIPage'):
+			device_unlock(device)
 		pass_fail(expected='OBPrivacySplash', test_case='Open Network Test', test_num=5)
+
 
 def privacy_pane():
 	press('Continue')
 
-def skip_bio(FlowState):
-	device = FlowState.primary_device
+def skip_bio(self):
+	device = self.primary_device
 	pane = current_buddy_pane(device=device)
 	if pane == 'PearlSplash':
 		quick.tap('Set Up Later in Settings')
@@ -226,9 +251,9 @@ def skip_bio(FlowState):
         quick.tap('Button', index = 4)
         log_info(' - TouchID skipped')
     
-def passcode_pane(FlowState):
-	device = FlowState.primary_device
-	if FlowState.skip_passcode:
+def passcode_pane(self):
+	device = self.primary_device
+	if self.skip_passcode:
 		screen_log(device=device)
 		quick.wait('Passcode', modifiers = ['partial'])
 		quick.tap('Button', index = 2)
@@ -236,8 +261,8 @@ def passcode_pane(FlowState):
 		press('Don', modifiers = [quick.ALERT, 'partial'])
 		pass_fail(expected='DeviceRestoreChoice', test_case = 'Skip Passcode', test_num=9)
 	else:
-		if FlowState.alpha_passcode != None:
-			passcode = str(FlowState.alpha_passcode)
+		if self.alpha_passcode != None:
+			passcode = str(self.alpha_passcode)
 			if len(passcode) < 5:
 				passcode = 'apple1984'
 			inc = passcode + 'a'
@@ -250,8 +275,8 @@ def passcode_pane(FlowState):
 			quick.type_string(passcode)
 			quick.type_string(passcode)
 			pass_fail(expected = 'DeviceRestoreChoice' , test_case = 'Alphanumeric Passcode', test_num=33)
-		elif FlowState.six_num_passcode != None:
-			passcode = str(FlowState.six_num_passcode)
+		elif self.six_num_passcode != None:
+			passcode = str(self.six_num_passcode)
 			if len(passcode) != 6 or int(passcode) == 999999:
 				passcode = '100000'
 			inc = str(int(passcode) + 1) 
@@ -261,9 +286,9 @@ def passcode_pane(FlowState):
 			quick.type_string(passcode)
 			quick.type_string(passcode)	
 			pass_fail(expected = 'DeviceRestoreChoice' , test_case = 'Alphanumeric Passcode', test_num=32)
-		"""Four digit passcodes are not currently part of testing.	
-		elif FlowState.four_num_passcode != None:
-			passcode = str(FlowState.four_num_passcode)
+		#Four digit passcodes are not currently part of testing.	
+		elif self.four_num_passcode != None:
+			passcode = str(self.four_num_passcode)
 			if len(passcode) != 4 or int(passcode) == 9999:
 				passcode = '1000'			
 			inc = str(int(passcode) + 1)
@@ -275,13 +300,18 @@ def passcode_pane(FlowState):
 			quick.type_string(passcode)
 			quick.type_string(passcode)
 			quick.type_string(passcode)			
-			"""
+			
 		else:
-			#reverts back to a no password check if other options not available
 			log_info(' - No password details provided. Skipping password input')
-			FlowState.skip_passcode = True
-			passcode_pane(FlowState)
+			self.skip_passcode = True
+			passcode_pane(self)
 
+def restore_pane(self):
+	if not restore_backup:
+		press("Don't Transfer Apps", modifiers = ['partial'])
+	else:
+		if None not in (self.iCloud_password, self.iCloud_account):
+			
 
 
 
@@ -295,9 +325,11 @@ def main():
 	flow.primary_device = quick.select_device(1)
 	flow.language_tmp  = 'Deutsch'
 	flow.region_tmp = 'Australia'
-	flow.wifi_ssid="Suiteamerica450"
-	flow.wifi_password='450suite'
-	flow.protected_wifi=True
+	#flow.wifi_ssid="Suiteamerica450"
+	#flow.wifi_password='450suite'
+	#flow.protected_wifi=True
+	quick.set_localized_mode(True)
+	quick.set_localized_mode(False)
 	language_chooser(flow)
 	region_chooser(flow)
 	prox_pane()
@@ -314,5 +346,5 @@ def main():
 
 
 	
-
-main()
+if __name__ ==  '__main__':
+	main()
